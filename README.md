@@ -1,5 +1,9 @@
 # G Capture
 
+![Platform: Windows 10/11](https://img.shields.io/badge/platform-Windows%2010%2F11-0078D4)
+![Python: 3.10+](https://img.shields.io/badge/python-3.10%2B-3776AB?logo=python&logoColor=white)
+![Runs offline](https://img.shields.io/badge/runs-offline-success)
+
 A local Windows screen capture and annotation application. Requires Windows 10/11 and Python 3.10 or newer. No network connection, account, telemetry, or cloud upload is used by the app.
 
 ## Run
