@@ -354,9 +354,9 @@ class App(tk.Tk):
 
     def capture_done(self, image, box):
         self.busy = False
-        self.deiconify()
-        self.lift()
         if image is not None:
+            self.deiconify()
+            self.lift()
             self.set_image(image, add_history=True)
             try:
                 windows.copy_image(image)

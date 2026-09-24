@@ -17,14 +17,19 @@ class CaptureFlowTests(unittest.TestCase):
             App.capture_done(app, image, None)
         copy.assert_called_once_with(image)
         app.set_image.assert_called_once_with(image, add_history=True)
+        app.deiconify.assert_called_once()
+        app.lift.assert_called_once()
         self.assertFalse(app.busy)
 
-    def test_cancellation_does_not_change_clipboard_or_image(self):
+    def test_cancellation_keeps_window_hidden_and_preserves_clipboard_and_image(self):
         app = self.fake_app()
         with patch('app.windows.copy_image') as copy:
             App.capture_done(app, None, None)
         copy.assert_not_called()
         app.set_image.assert_not_called()
+        app.deiconify.assert_not_called()
+        app.lift.assert_not_called()
+        self.assertFalse(app.busy)
 
     def test_clipboard_failure_keeps_capture_without_dialog(self):
         app = self.fake_app()
