@@ -10,7 +10,7 @@ from PIL import Image, ImageTk, ImageDraw
 from annotations import Annotation, composite
 import windows
 from imaging import stitch
-from settings import DEFAULT_SHORTCUTS, KEYS, load_shortcuts, save_shortcuts, validate
+from settings import DEFAULT_SHORTCUTS, KEYS, load_shortcuts, save_shortcuts, validate, load_open_editor_from_tray
 from desktop import Tray, set_startup, startup_enabled
 
 BG = '#101722'
@@ -113,6 +113,7 @@ class App(tk.Tk):
         self.busy = False
         self.shortcut_dialog = None
         self.shortcuts = load_shortcuts()
+        self.open_editor_from_tray = load_open_editor_from_tray()
         self.shortcut_summary = tk.StringVar()
         self.dirty = False
         self.scale = 1.0
@@ -235,7 +236,7 @@ class App(tk.Tk):
             f'{mode}: {self.shortcuts[key]}' + (' (unavailable)' if int(key) in failed else '')
             for key, mode in [('1', 'Region'), ('2', 'Full screen'), ('3', 'Window')]))
 
-    def apply_shortcuts(self, candidate):
+    def apply_shortcuts(self, candidate, open_editor_from_tray=None):
         candidate = validate(candidate)
         previous = self.shortcuts.copy()
         failed = windows.hotkeys(shortcuts=candidate)
@@ -248,12 +249,14 @@ class App(tk.Tk):
                              'the option to open screen capture with Print Screen, then try again. '
                              'Your previous preferences were kept.')
         try:
-            save_shortcuts(candidate)
+            save_shortcuts(candidate, open_editor_from_tray=open_editor_from_tray)
         except OSError:
             restored_failed = windows.hotkeys(shortcuts=previous)
             self.update_shortcut_summary(restored_failed)
             raise
         self.shortcuts = candidate
+        if open_editor_from_tray is not None:
+            self.open_editor_from_tray = open_editor_from_tray
         self.update_shortcut_summary()
         self.status.set('Capture shortcuts saved. They work while G Capture is running, including when minimized.')
 
@@ -285,6 +288,13 @@ class App(tk.Tk):
                            'If Windows opens its snipping tool, disable the Print Screen option\n'
                            'under Windows Settings > Accessibility > Keyboard.').grid(row=4, column=0, columnspan=5, sticky='w', pady=16)
 
+        open_editor = tk.BooleanVar(value=self.open_editor_from_tray)
+        tk.Checkbutton(dialog, text='Open editor after captures from the tray', variable=open_editor,
+                       bg=BG, fg=TEXT, selectcolor=PANEL, activebackground=BG,
+                       activeforeground=TEXT).grid(row=5, column=0, columnspan=5, sticky='w')
+        self.label(dialog, 'Captures always copy to the clipboard. An open or minimized editor\n'
+                           'always returns after capture.').grid(row=6, column=0, columnspan=5, sticky='w', pady=(4, 16))
+
         def close_dialog():
             dialog.grab_release()
             self.shortcut_dialog = None
@@ -295,13 +305,14 @@ class App(tk.Tk):
                 [name for name, value in modifiers.items() if value.get()] + [key.get()]))
                 for identifier, (key, modifiers) in rows.items()}
             try:
-                self.apply_shortcuts(candidate)
+                self.apply_shortcuts(candidate, open_editor.get())
             except (ValueError, OSError) as error:
                 messagebox.showerror('Shortcut not saved', str(error), parent=dialog)
                 return
             close_dialog()
 
         def defaults():
+            open_editor.set(False)
             for identifier, (key, modifiers) in rows.items():
                 parts = DEFAULT_SHORTCUTS[identifier].split('+')
                 key.set(parts[-1])
@@ -309,7 +320,7 @@ class App(tk.Tk):
                     value.set(name in parts[:-1])
 
         actions = tk.Frame(dialog, bg=BG)
-        actions.grid(row=5, column=0, columnspan=5, sticky='ew')
+        actions.grid(row=7, column=0, columnspan=5, sticky='ew')
         self.button(actions, 'Reset defaults', defaults).pack(side='left')
         self.button(actions, 'Save', apply, True).pack(side='right', padx=(8, 0))
         self.button(actions, 'Cancel', close_dialog).pack(side='right')
@@ -337,6 +348,8 @@ class App(tk.Tk):
             self.status.set('Move the pointer over the target. Capture happens after at least 3 seconds.')
             delay = max(3, delay)
         self.busy = True
+        # Remember taskbar presence before temporarily hiding for capture.
+        self.capture_show_editor = self.state() != 'withdrawn' or self.open_editor_from_tray
         self.withdraw()
         self.after(max(250, delay*1000), lambda: self.begin_capture(mode, size))
 
@@ -355,8 +368,9 @@ class App(tk.Tk):
     def capture_done(self, image, box):
         self.busy = False
         if image is not None:
-            self.deiconify()
-            self.lift()
+            if self.capture_show_editor:
+                self.deiconify()
+                self.lift()
             self.set_image(image, add_history=True)
             try:
                 windows.copy_image(image)

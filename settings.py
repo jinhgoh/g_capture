@@ -41,8 +41,18 @@ def load_shortcuts(path=SETTINGS_PATH):
         return DEFAULT_SHORTCUTS.copy()
 
 
-def save_shortcuts(shortcuts, path=SETTINGS_PATH):
-    content = json.dumps({'shortcuts': validate(shortcuts)}, indent=2)
+def load_open_editor_from_tray(path=SETTINGS_PATH):
+    try:
+        return json.loads(path.read_text(encoding='utf-8')).get('open_editor_from_tray') is True
+    except (OSError, ValueError, AttributeError):
+        return False
+
+
+def save_shortcuts(shortcuts, path=SETTINGS_PATH, *, open_editor_from_tray=None):
+    if open_editor_from_tray is None:
+        open_editor_from_tray = load_open_editor_from_tray(path)
+    content = json.dumps({'shortcuts': validate(shortcuts),
+                          'open_editor_from_tray': bool(open_editor_from_tray)}, indent=2)
     temporary = path.with_suffix('.tmp')
     temporary.write_text(content + '\n', encoding='utf-8')
     temporary.replace(path)

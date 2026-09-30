@@ -3,7 +3,7 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch, call
-from settings import DEFAULT_SHORTCUTS, parse_shortcut, validate, load_shortcuts, save_shortcuts
+from settings import DEFAULT_SHORTCUTS, parse_shortcut, validate, load_shortcuts, save_shortcuts, load_open_editor_from_tray
 
 
 class ShortcutTests(unittest.TestCase):
@@ -40,6 +40,19 @@ class ShortcutTests(unittest.TestCase):
             with self.assertRaises(OSError):
                 App.apply_shortcuts(fake, candidate)
             self.assertEqual(register.call_args.kwargs['shortcuts'], DEFAULT_SHORTCUTS)
+
+    def test_editor_preference_defaults_and_persistence(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'settings.json'
+            self.assertFalse(load_open_editor_from_tray(path))
+            path.write_text('{"shortcuts": {}}', encoding='utf-8')
+            self.assertFalse(load_open_editor_from_tray(path))
+            save_shortcuts(DEFAULT_SHORTCUTS, path, open_editor_from_tray=True)
+            self.assertTrue(load_open_editor_from_tray(path))
+            save_shortcuts(DEFAULT_SHORTCUTS, path)
+            self.assertTrue(load_open_editor_from_tray(path))
+            save_shortcuts(DEFAULT_SHORTCUTS, path, open_editor_from_tray=False)
+            self.assertFalse(load_open_editor_from_tray(path))
 
     def test_registration_releases_old_keys(self):
         import windows
