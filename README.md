@@ -9,9 +9,14 @@ A local Windows screen capture and annotation application. Requires Windows 10/1
 
 ## Run
 
-Double-click **G Capture.lnk** to start with the app icon and no console window.
-**launch.bat** also starts without keeping a console open (a console may flash briefly).
-The shortcut points to this folder and the current Python installation; recreate it if either is moved.
+Double-click **launch.bat** to start. It finds Python 3.10 or newer, creates a local
+`.venv`, and installs missing dependencies automatically. First-time setup requires
+internet access; later launches work offline and close the console after startup.
+Setup errors stay visible in the console.
+
+The included **G Capture.lnk** contains paths from the original computer. Use
+**launch.bat** instead, or create your own Windows shortcut to it. If you move the
+project folder, delete `.venv` so the launcher can recreate it at the new location.
 
 ### System tray and startup
 
@@ -22,8 +27,8 @@ Uncheck **Run at startup** to stop automatic launches, or check it to launch dir
 To install dependencies or run with a console for troubleshooting:
 
 ```powershell
-python -m pip install -r requirements.txt
-python app.py
+.venv\Scripts\python.exe -m pip install -r requirements.txt
+.venv\Scripts\python.exe app.py
 ```
 
 ## Capture
