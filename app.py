@@ -1,6 +1,8 @@
 """G Capture — local Windows screen capture and annotation."""
 import datetime as dt
 import queue
+import threading
+import ocr
 import sys
 from copy import deepcopy
 from pathlib import Path
@@ -10,7 +12,7 @@ from PIL import Image, ImageTk, ImageDraw
 from annotations import Annotation, composite
 import windows
 from imaging import stitch
-from settings import DEFAULT_SHORTCUTS, KEYS, load_shortcuts, save_shortcuts, validate, load_open_editor_from_tray
+from settings import DEFAULT_SHORTCUTS, KEYS, load_shortcuts, save_shortcuts, validate, load_open_editor_from_tray, load_ocr, save_ocr
 from desktop import Tray, set_startup, startup_enabled
 
 BG = '#101722'
@@ -113,6 +115,7 @@ class App(tk.Tk):
         self.busy = False
         self.shortcut_dialog = None
         self.shortcuts = load_shortcuts()
+        self.ocr_options = load_ocr()
         self.open_editor_from_tray = load_open_editor_from_tray()
         self.shortcut_summary = tk.StringVar()
         self.dirty = False
@@ -168,6 +171,8 @@ class App(tk.Tk):
             self.button(captures, name, lambda m=name: self.capture(m), name == 'Region').pack(side='left', padx=(0, 6))
         options = tk.Frame(self, bg=BG, padx=22, pady=10)
         options.pack(fill='x')
+        self.button(options, 'Copy text (OCR)', lambda: self.capture('OCR'), True).pack(side='left', padx=(0, 8))
+        self.button(options, 'OCR settings', self.show_ocr_settings).pack(side='right', padx=4)
         self.label(options, 'Delay (s)').pack(side='left')
         tk.Spinbox(options, from_=0, to=30, textvariable=self.delay, width=4).pack(side='left', padx=8)
         self.label(options, 'Fixed size').pack(side='left')
@@ -234,7 +239,7 @@ class App(tk.Tk):
     def update_shortcut_summary(self, failed=()):
         self.shortcut_summary.set('   |   '.join(
             f'{mode}: {self.shortcuts[key]}' + (' (unavailable)' if int(key) in failed else '')
-            for key, mode in [('1', 'Region'), ('2', 'Full screen'), ('3', 'Window')]))
+            for key, mode in [('1', 'Region'), ('2', 'Full screen'), ('3', 'Window'), ('4', 'OCR')]))
 
     def apply_shortcuts(self, candidate, open_editor_from_tray=None):
         candidate = validate(candidate)
@@ -272,7 +277,7 @@ class App(tk.Tk):
         dialog.transient(self)
         rows = {}
         self.label(dialog, 'Choose a global shortcut for each capture mode.').grid(row=0, column=0, columnspan=5, pady=(0, 16), sticky='w')
-        for row, (identifier, mode) in enumerate([('1', 'Region'), ('2', 'Full screen'), ('3', 'Window')], 1):
+        for row, (identifier, mode) in enumerate([('1', 'Region'), ('2', 'Full screen'), ('3', 'Window'), ('4', 'OCR')], 1):
             self.label(dialog, mode).grid(row=row, column=0, sticky='w', padx=(0, 16), pady=8)
             parts = self.shortcuts[identifier].split('+')
             key = tk.StringVar(value=parts[-1])
@@ -286,14 +291,14 @@ class App(tk.Tk):
             rows[identifier] = (key, modifiers)
         self.label(dialog, 'Print Screen alone is supported. Letters/numbers require a modifier.\n'
                            'If Windows opens its snipping tool, disable the Print Screen option\n'
-                           'under Windows Settings > Accessibility > Keyboard.').grid(row=4, column=0, columnspan=5, sticky='w', pady=16)
+                           'under Windows Settings > Accessibility > Keyboard.').grid(row=5, column=0, columnspan=5, sticky='w', pady=16)
 
         open_editor = tk.BooleanVar(value=self.open_editor_from_tray)
         tk.Checkbutton(dialog, text='Open editor after captures from the tray', variable=open_editor,
                        bg=BG, fg=TEXT, selectcolor=PANEL, activebackground=BG,
-                       activeforeground=TEXT).grid(row=5, column=0, columnspan=5, sticky='w')
+                       activeforeground=TEXT).grid(row=6, column=0, columnspan=5, sticky='w')
         self.label(dialog, 'Captures always copy to the clipboard. An open or minimized editor\n'
-                           'always returns after capture.').grid(row=6, column=0, columnspan=5, sticky='w', pady=(4, 16))
+                           'always returns after capture.').grid(row=7, column=0, columnspan=5, sticky='w', pady=(4, 16))
 
         def close_dialog():
             dialog.grab_release()
@@ -320,13 +325,104 @@ class App(tk.Tk):
                     value.set(name in parts[:-1])
 
         actions = tk.Frame(dialog, bg=BG)
-        actions.grid(row=7, column=0, columnspan=5, sticky='ew')
+        actions.grid(row=8, column=0, columnspan=5, sticky='ew')
         self.button(actions, 'Reset defaults', defaults).pack(side='left')
         self.button(actions, 'Save', apply, True).pack(side='right', padx=(8, 0))
         self.button(actions, 'Cancel', close_dialog).pack(side='right')
         dialog.protocol('WM_DELETE_WINDOW', close_dialog)
         dialog.bind('<Escape>', lambda e: close_dialog())
         dialog.grab_set()
+
+    def show_ocr_settings(self):
+        if self.busy or self.shortcut_dialog is not None:
+            return
+        dialog = tk.Toplevel(self)
+        self.shortcut_dialog = dialog
+        dialog.title('OCR settings')
+        dialog.configure(bg=BG, padx=20, pady=20)
+        dialog.transient(self)
+        languages = tk.StringVar(value=self.ocr_options['languages'])
+        executable = tk.StringVar(value=self.ocr_options['executable'])
+        self.label(dialog, 'Languages: eng+kor (English, Korean and numbers).\nOther examples: eng+jpn, eng+chi_sim, eng+fra.').pack(anchor='w')
+        tk.Entry(dialog, textvariable=languages, width=60).pack(fill='x', pady=8)
+        self.label(dialog, 'Tesseract executable (blank = auto-detect)').pack(anchor='w')
+        tk.Entry(dialog, textvariable=executable, width=60).pack(fill='x', pady=8)
+        def browse():
+            path = filedialog.askopenfilename(parent=dialog, title='Choose tesseract.exe', filetypes=[('Executable', '*.exe')])
+            if path:
+                executable.set(path)
+        self.button(dialog, 'Browse...', browse).pack(anchor='w')
+        self.label(dialog, "Install matching .traineddata files in Tesseract's tessdata folder.\nOCR runs locally. See README for installation instructions.").pack(pady=12)
+        def save():
+            try:
+                candidate = ocr.validate_options({'languages': languages.get().strip(), 'executable': executable.get()})
+                save_ocr(candidate)
+            except (ValueError, OSError) as error:
+                messagebox.showerror('OCR settings not saved', str(error), parent=dialog)
+                return
+            self.ocr_options = candidate
+            dialog.destroy()
+        self.button(dialog, 'Save', save, True).pack(side='right')
+        self.button(dialog, 'Cancel', dialog.destroy).pack(side='right', padx=8)
+        dialog.bind('<Escape>', lambda e: dialog.destroy())
+        dialog.grab_set()
+        try:
+            dialog.wait_window()
+        finally:
+            self.shortcut_dialog = None
+
+    def ocr_selected(self, image, box):
+        if self.capture_show_editor:
+            self.deiconify()
+            self.lift()
+        if image is None:
+            self.busy = False
+            self.status.set('OCR canceled')
+            return
+        self.status.set('Recognizing text...')
+        results = queue.Queue()
+        options = self.ocr_options.copy()
+        def work():
+            try:
+                results.put((ocr.recognize(image, options), None))
+            except Exception as error:
+                results.put((None, error))
+        threading.Thread(target=work, daemon=True).start()
+        def collect():
+            try:
+                text, error = results.get_nowait()
+            except queue.Empty:
+                self.after(100, collect)
+                return
+            self.ocr_done(text, error)
+        self.after(100, collect)
+
+    def ocr_done(self, text, error):
+        self.busy = False
+        if error is not None:
+            self.status.set(f'OCR failed: {error}')
+            messagebox.showerror('OCR failed', str(error), parent=self)
+        elif not text:
+            self.status.set('No text found. Clipboard unchanged.')
+            messagebox.showinfo('OCR', 'No text found. Try a tighter selection or check OCR languages.', parent=self)
+        else:
+            try:
+                windows.copy_text(text)
+                self.status.set('Text copied to clipboard - Ctrl+V to paste')
+                if not self.capture_show_editor and self.tray is not None:
+                    try:
+                        self.tray.icon.notify('Text copied to clipboard', 'G Capture OCR')
+                    except Exception:
+                        pass  # Notifications are optional; text was already copied.
+            except Exception as error:
+                self.status.set(f'Text recognized, but clipboard copy failed: {error}')
+                dialog = tk.Toplevel(self)
+                dialog.title('Recognized text - select and copy with Ctrl+C')
+                field = tk.Text(dialog, wrap='word', width=70, height=20)
+                field.pack(fill='both', expand=True)
+                field.insert('1.0', text)
+                field.tag_add('sel', '1.0', 'end-1c')
+                field.focus_set()
 
     def safe(self, action):
         try:
@@ -360,7 +456,8 @@ class App(tk.Tk):
             elif mode in ('Window', 'Control'):
                 self.capture_done(windows.grab(windows.target_rect(mode == 'Window')), None)
             else:
-                Selection(self, mode, self.start_scroll if mode == 'Scrolling' else self.capture_done, size)
+                callback = self.ocr_selected if mode == 'OCR' else (self.start_scroll if mode == 'Scrolling' else self.capture_done)
+                Selection(self, mode, callback, size)
         except Exception as error:
             self.capture_done(None, None)
             messagebox.showerror('Capture failed', str(error))
@@ -699,6 +796,8 @@ class App(tk.Tk):
                     self.lift()
                 elif command == 'capture' and not self.busy and self.shortcut_dialog is None:
                     self.capture('Region')
+                elif command == 'ocr' and not self.busy and self.shortcut_dialog is None:
+                    self.capture('OCR')
                 elif command == 'startup':
                     try:
                         set_startup(not startup_enabled())
@@ -707,7 +806,7 @@ class App(tk.Tk):
                         messagebox.showerror('Startup setting', str(exc), parent=self)
         for identifier in windows.poll_hotkeys():
             if not self.busy and self.shortcut_dialog is None:
-                self.capture({1: 'Region', 2: 'Full screen', 3: 'Window'}[identifier])
+                self.capture({1: 'Region', 2: 'Full screen', 3: 'Window', 4: 'OCR'}[identifier])
         self.poll_timer = self.after(100, self.poll)
 
     def destroy(self):

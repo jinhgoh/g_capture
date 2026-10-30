@@ -14,13 +14,13 @@ class ShortcutTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             parse_shortcut('A')
         with self.assertRaises(ValueError):
-            validate({'1': 'Ctrl+Alt+A', '2': 'Alt+Ctrl+A', '3': 'Disabled'})
+            validate({'1': 'Ctrl+Alt+A', '2': 'Alt+Ctrl+A', '3': 'Disabled', '4': 'Disabled'})
 
     def test_preferences_roundtrip_and_corruption(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'settings.json'
             self.assertEqual(load_shortcuts(path), DEFAULT_SHORTCUTS)
-            prefs = {'1': 'Shift+Print Screen', '2': 'Disabled', '3': 'Ctrl+F9'}
+            prefs = {'1': 'Shift+Print Screen', '2': 'Disabled', '3': 'Ctrl+F9', '4': 'Ctrl+Alt+O'}
             save_shortcuts(prefs, path)
             self.assertEqual(load_shortcuts(path), prefs)
             path.write_text('{broken', encoding='utf-8')
@@ -60,10 +60,10 @@ class ShortcutTests(unittest.TestCase):
             with patch.object(windows.user32, 'RegisterHotKey', return_value=1) as register, patch.object(windows.user32, 'UnregisterHotKey', return_value=1) as unregister:
                 windows.hotkeys(shortcuts=DEFAULT_SHORTCUTS)
                 self.assertIn(call(None, 1, 0x4000, 0x2C), register.call_args_list)
-                windows.hotkeys(shortcuts={'1': 'Ctrl+F8', '2': 'Disabled', '3': 'Disabled'})
-                self.assertEqual(unregister.call_count, 3)
-                windows.hotkeys(False)
+                windows.hotkeys(shortcuts={'1': 'Ctrl+F8', '2': 'Disabled', '3': 'Disabled', '4': 'Disabled'})
                 self.assertEqual(unregister.call_count, 4)
+                windows.hotkeys(False)
+                self.assertEqual(unregister.call_count, 5)
         finally:
             windows.hotkeys(False)
 

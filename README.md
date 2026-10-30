@@ -47,6 +47,32 @@ Click **Shortcuts…** to choose a key and optional Ctrl/Alt/Shift modifiers for
 
 If Print Screen opens the Windows snipping tool, turn off the Print Screen screen-capture option under **Windows Settings > Accessibility > Keyboard**, then save the shortcut again. Other capture apps may also reserve this key. The app does not change Windows settings automatically.
 
+## Copy text from a region (OCR)
+
+Click **Copy text (OCR)**, press **Ctrl+Alt+O**, or choose **Copy text (OCR)** from
+the tray menu. Drag a box around text on any monitor. Recognized text is copied
+automatically; paste with **Ctrl+V**. **Esc** cancels. OCR leaves your current
+image and annotations intact. Empty results and recognition failures leave the
+clipboard unchanged. If copying fails, a text window lets you copy the result.
+The shortcut can be changed or disabled in **Shortcuts**.
+
+OCR uses a separate local **Tesseract** installation. Install a Windows build
+using the links in the [Tesseract installation guide](https://tesseract-ocr.github.io/tessdoc/Installation.html),
+and include English and Korean language data. If the installer does not offer
+Korean, obtain `kor.traineddata` from the official
+[tessdata_fast language models](https://github.com/tesseract-ocr/tessdata_fast)
+and put it in the installation's `tessdata` folder alongside `eng.traineddata`.
+Language downloads need internet; recognition runs offline.
+
+Open **OCR settings** to choose `tesseract.exe` if it is not detected automatically.
+The default languages are **eng+kor** (English + Korean, including digits).
+Other combinations such as `eng+jpn`, `eng+chi_sim`, or `eng+fra` work when their
+matching language data is installed. Use `+` between codes. Preferences persist
+in `settings.json` and are preserved when shortcut settings change.
+See [Tesseract command-line usage](https://tesseract-ocr.github.io/tessdoc/Command-Line-Usage.html)
+for language selection details. Recognition works best on a tight box of clear,
+horizontal printed text; complex layouts and handwriting may be inaccurate.
+
 ## Edit and export
 
 Pen, translucent highlighter, arrows, rectangles, ellipses, text (including Korean), mosaic, and crop. Select a drawing tool and drag on the image; Text asks for text to place.
@@ -61,7 +87,7 @@ When G Capture is hidden in the system tray, Print Screen and other captures cop
 
 Save PNG, JPEG, or BMP with **Ctrl+S**; copy the current image after editing with **Ctrl+C**; open an existing image with **Ctrl+O**. PNG retains freehand transparency; JPEG/BMP exports flatten onto white. Clipboard uses standard Windows DIB format without alpha transparency. Recent history stores up to ten original captures in memory only; edited versions must be saved separately. There are no unsaved-changes prompts when capturing, opening images, switching history, or closing. Unsaved edits are not preserved when the current image is replaced or the app closes.
 
-This version does not include OCR, AI background removal/upscaling, automatic face detection, or an installer. Protected video, secure desktops, and some hardware overlays cannot be captured. Scrolling alignment is best effort rather than full compatibility with all applications.
+This version does not include AI background removal/upscaling, automatic face detection, or an installer. Protected video, secure desktops, and some hardware overlays cannot be captured. Scrolling alignment is best effort rather than full compatibility with all applications.
 
 ## Verify
 

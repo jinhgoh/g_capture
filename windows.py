@@ -73,6 +73,16 @@ def copy_image(image):
     stream = io.BytesIO()
     image.convert('RGB').save(stream, 'BMP')
     data = stream.getvalue()[14:]
+    _copy_data(data, 8)
+
+
+def copy_text(text):
+    # CF_UNICODETEXT is UTF-16LE with a terminating wide null.
+    data = (text.replace('\r\n', '\n').replace('\n', '\r\n') + '\0').encode('utf-16-le')
+    _copy_data(data, 13)
+
+
+def _copy_data(data, format_id):
     if not user32.OpenClipboard(None):
         raise RuntimeError('Clipboard is busy. Try again.')
     handle = None
@@ -85,7 +95,7 @@ def copy_image(image):
             raise MemoryError('Cannot lock clipboard memory.')
         ctypes.memmove(pointer, data, len(data))
         kernel32.GlobalUnlock(handle)
-        if not user32.EmptyClipboard() or not user32.SetClipboardData(8, handle):
+        if not user32.EmptyClipboard() or not user32.SetClipboardData(format_id, handle):
             raise RuntimeError('Could not write the clipboard.')
         handle = None  # Windows owns the allocation after successful transfer.
     finally:

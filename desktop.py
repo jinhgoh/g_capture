@@ -62,6 +62,7 @@ class Tray:
         self.icon = pystray.Icon('GCapture', image, 'G Capture', pystray.Menu(
             pystray.MenuItem('Open G Capture', send('open'), default=True),
             pystray.MenuItem('Capture region', send('capture')),
+            pystray.MenuItem('Copy text (OCR)', send('ocr')),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem('Run at startup', send('startup'),
                              checked=startup_checked),
